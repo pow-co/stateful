@@ -15,7 +15,7 @@ const Pack = require('../package');
 
 import { load } from './server/handlers'
 
-import { plugin as socketio } from './socket.io/plugin'
+import { plugin as websockets } from './ws/plugin'
 
 const handlers = load(join(__dirname, './server/handlers'))
 
@@ -53,7 +53,8 @@ if (config.get('prometheus_enabled')) {
 }
 
 server.route({
-  method: 'GET', path: '/api/v0/status',
+  method: 'GET',
+  path: '/api/v0/status',
   handler: handlers.Status.index,
   options: {
     description: 'Simply check to see that the server is online and responding',
@@ -68,6 +69,33 @@ server.route({
   }
 })
 
+server.route({
+  method: 'GET',
+  path: '/api/v1/objects/{location}',
+  handler: handlers.Objects.show,
+  options: {
+    description: 'Details and Locations of a Smart Object On Chain',
+    tags: ['api', 'objects'],
+    response: {
+      failAction: 'log',
+      schema: Joi.object({
+        origin: Joi.string().required().description('Txid and Output Index of First Location of This Smart Contract Instance'),
+        code_part: Joi.string().optional().description('Code Part of the Smart Object, Remains Unchanged Across All Locations'),
+        abi: Joi.object().optional().description('Abstract Binary Interface of Smart Contract If Known'),
+        locations: Joi.array().items(Joi.object({
+          outpoint: Joi.string().description('Txid and Output Index of The Object State in This Location'),
+          state: Joi.string().description('Start Part of the Output Script (As Opposed to the Code Part)'), 
+          properties: Joi.object().optional().description('Parsed Variables And Their Values In This State')
+        })).description('List of State Updates And Their Location On Chain Most Recent First'),
+        destruction: Joi.string().optional().description('Txid and Input Index (Inpoint) If / When The Object Is Finally Unlocked'),
+        error: Joi.string().optional()
+      }).label('ServerStatus')
+    }
+  }
+})
+
+
+
 var started = false
 
 export async function start() {
@@ -80,12 +108,12 @@ export async function start() {
 
     const swaggerOptions = {
       info: {
-        title: 'API Docs',
+        title: 'Stateful',
         version: Pack.version,
-        description: 'Developer API Documentation \n\n *** DEVELOPERS *** \n\n Edit this file under `swaggerOptions` in `src/server.ts` to better describe your service.'
+        description: 'Track Updates To Stateful Smart Contracts In Real Time'
       },
       schemes: ['http', 'https'],
-      host: 'localhost:5200',
+      host: 'state.pow.co',
       documentationPath: '/api',
       grouping: 'tags'
     }
@@ -108,7 +136,7 @@ export async function start() {
     log.info('server.api.documentation.swagger', swaggerOptions)
   }
 
-  await server.register(socketio);
+  await server.register(websockets);
 
   await server.start();
 
@@ -123,3 +151,4 @@ if (require.main === module) {
   start()
 
 }
+
